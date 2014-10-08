@@ -1,3 +1,4 @@
+// This is to satisfy S
 // UCLA CS 111 Lab 1 command reading
 
 // Copyright 2012-2014 Paul Eggert.
