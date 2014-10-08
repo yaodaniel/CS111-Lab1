@@ -18,6 +18,7 @@
 
 #include "command.h"
 #include "command-internals.h"
+#include "stdio.h"
 
 #include <error.h>
 
@@ -26,6 +27,14 @@
 
 /* FIXME: Define the type 'struct command_stream' here.  This should
    complete the incomplete type declaration in command.h.  */
+struct command_stream {
+       struct commandNode *head;
+};   
+
+struct commandNode {
+      struct command *command;
+      struct CommandNode *next;
+};
 
 command_stream_t
 make_command_stream (int (*get_next_byte) (void *),
@@ -34,7 +43,11 @@ make_command_stream (int (*get_next_byte) (void *),
   /* FIXME: Replace this with your implementation.  You may need to
      add auxiliary functions and otherwise modify the source code.
      You can also use external functions defined in the GNU C Library.  */
-  error (1, 0, "command reading not yet implemented");
+  while(get_next_byte(get_next_byte_argument) != EOF){
+  
+}
+  //printf ("%s\n", "blah");
+  //error (1, 0, "command reading not yet implemented");
   return 0;
 }
 
