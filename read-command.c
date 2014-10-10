@@ -19,6 +19,8 @@
 #include "command.h"
 #include "command-internals.h"
 #include "stdio.h"
+#include <stdlib.h>
+#include <ctype.h>
 
 #include <error.h>
 
@@ -27,14 +29,33 @@
 
 /* FIXME: Define the type 'struct command_stream' here.  This should
    complete the incomplete type declaration in command.h.  */
-struct command_stream {
-       struct commandNode *head;
-};   
-
+   
+//Command linked lists begin
 struct commandNode {
       struct command *command;
       struct CommandNode *next;
 };
+
+struct command_stream {
+       struct commandNode *head;
+};
+//Command Linked lists end
+
+//Stack structure begin
+struct stackNode {
+       
+
+};
+//Stack structure end
+
+int isWord (char c) {
+    return isalpha(c) | isdigit(c) | (c=='!') | (c=='%') | (c=='+') | (c==',') | (c=='-') | (c=='.') |
+           (c=='/') | (c==':') | (c=='@') | (c=='^') | (c=='_');
+}
+
+int isSpecialToken (char c) {
+    return (c==';') | (c=='|') | (c=='(') | (c==')') | (c=='<') | (c=='>');
+}
 
 command_stream_t
 make_command_stream (int (*get_next_byte) (void *),
@@ -43,8 +64,16 @@ make_command_stream (int (*get_next_byte) (void *),
   /* FIXME: Replace this with your implementation.  You may need to
      add auxiliary functions and otherwise modify the source code.
      You can also use external functions defined in the GNU C Library.  */
-  while(get_next_byte(get_next_byte_argument) != EOF){
-  
+     
+     char currentCharacter = 'D'; //Random Character Value
+     while(currentCharacter != EOF){
+          currentCharacter = get_next_byte(get_next_byte_argument);
+          if(isWord(currentCharacter)) {
+               //DO SOMETHING...
+          }      
+          if(isSpecialToken(currentCharacter)) {
+               //Do SOMETHING...
+          }
 }
   //printf ("%s\n", "blah");
   //error (1, 0, "command reading not yet implemented");
