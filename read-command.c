@@ -17,10 +17,10 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #include "command.h"
-#include "command-internals.h"
 #include "stdio.h"
 #include <stdlib.h>
 #include <ctype.h>
+#include "command-stack.h"
 
 #include <error.h>
 
