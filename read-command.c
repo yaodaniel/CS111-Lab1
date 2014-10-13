@@ -32,7 +32,7 @@
    
 //Command linked lists begin
 struct commandNode {
-      struct command *command;
+      command_t command;
       struct CommandNode *next;
 };
 
@@ -40,13 +40,6 @@ struct command_stream {
        struct commandNode *head;
 };
 //Command Linked lists end
-
-//Stack structure begin
-struct stackNode {
-       
-
-};
-//Stack structure end
 
 int isWord (char c) {
     return isalpha(c) | isdigit(c) | (c=='!') | (c=='%') | (c=='+') | (c==',') | (c=='-') | (c=='.') |
@@ -84,6 +77,12 @@ command_t
 read_command_stream (command_stream_t s)
 {
   /* FIXME: Replace this with your implementation too.  */
-  error (1, 0, "command reading not yet implemented");
-  return 0;
+  //error (1, 0, "command reading not yet implemented");
+  command_t returnObject = NULL;
+  if(s == NULL || s->head == NULL)
+       return NULL;
+       
+  returnObject = s->head->command;
+  s->head = s->head->next;
+       return returnObject;
 }
