@@ -16,6 +16,8 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+#include "op-stack.h"
+#include "command-stack.h"
 #include "command.h"
 #include "command-internals.h"
 #include "stdio.h"
@@ -45,6 +47,18 @@ struct commandNode {
       command_t command;
       struct CommandNode* next;
 };
+
+command_t makeSimpleCommand(int numWords, char** buffer) {
+     command_t newCommand = checked_malloc(sizeof(struct command));
+           newCommand -> type = SIMPLE_COMMAND;
+           newCommand -> status = -1;
+           newCommand -> input = NULL;
+           newCommand -> output = NULL;
+           newCommand -> u.word = buffer;
+     return newCommand;
+}
+
+
 
 command_stream_t
 make_command_stream (int (*get_next_byte) (void *),		// Parse texts
@@ -173,25 +187,95 @@ make_command_stream (int (*get_next_byte) (void *),		// Parse texts
 		tokens[noOfTokens]= word;
 		noOfTokens++;
 	}
-	int i=0;
-	while(i<noOfTokens)
+	int i, newLineFlag = 0, reasonableCommandSize = 100, numWordsInCurrentCommand = 0;
+  lineNumber = 1;
+  command_stack* myStack = create_stack(); //Command Stack
+  op_stack* myOpStack = create_stackOp(); //Operator Stack
+  char** buffer = checked_malloc(sizeof(char*)*reasonableCommandSize);
+  int commandType;
+  
+	for(i=0; i<noOfTokens; i++)
 	{
-		printf("%s\n", tokens[i]);
-		i++;
+    if(!specialTokens(tokens[i][0])) {
+       buffer[numWordsInCurrentCommand] = tokens[i];
+       numWordsInCurrentCommand++;
+       
+       if(numWordsInCurrentCommand >= reasonableCommandSize) {
+          reasonableCommandSize *= 2;
+          buffer = checked_realloc(buffer, reasonableCommandSize*sizeof(char*));
+       } 
+    }
+    else {
+       command_t newCommand = checked_malloc(sizeof(struct command));
+       switch(tokens[i][0]){
+       
+         case '\n':
+            newLineFlag = 1;
+            break;
+         
+         case ';': {
+           pushOp(myOpStack, SEMICOLON);
+           buffer[numWordsInCurrentCommand] = "\0";
+           push(myStack, makeSimpleCommand(numWordsInCurrentCommand, buffer));
+           numWordsInCurrentCommand = 0;
+           reasonableCommandSize = 100;
+           buffer = checked_malloc(sizeof(char*)*reasonableCommandSize);
+           
+           int blah = 0;
+           while((strcmp(peek(myStack) -> u.word[blah], "\0") != 0)){
+           printf("Top Command on the stack has the command: %s \n", peek(myStack) -> u.word[blah]);
+           blah++;
+           }
+         }
+            break;
+         
+         case '|':
+            break;
+         
+         case '<':
+            break;
+         
+          case '>':
+            break;
+         
+         case '(':
+            break;
+         
+         case '}':
+            break;
+         
+          default:
+               break;
+         }
+         
+    }
+    if(tokens[i] == "\n")
+       lineNumber++;
+       command_t commandOne = checked_malloc(sizeof(struct command));
+    
+    if(tokens[i] == ";" || tokens[i] == "|") {
+       //Make a simple command w/ previous texts
+    }             
+ 
+   printf("%s \n", tokens[i]);
 	}
-	printf("%u", noOfTokens);
+ 
+ 
+  
+   
 }
 
 command_t	
 read_command_stream (command_stream_t s)		// Creates a stack with commands
 {
   /* FIXME: Replace this with your implementation too.  */
-  //error (1, 0, "command reading not yet implemented");
-   command_t returnObject = NULL;
+  error (1, 0, "command reading not yet implemented");
+   /*command_t returnObject = NULL;
   if(s == NULL || s->head == NULL)
        return NULL;
        
   returnObject = s->head->command;
   s->head = (s->head)->next;
-       return returnObject;
+       return returnObject;*/
+       return NULL;
 }
