@@ -1,7 +1,5 @@
 #include "command-stack.h"
 
-
-
 command_stack* create_stack() {
      command_stack* stack = checked_malloc(sizeof(command_stack));
      stack->commandObjects = checked_malloc(sizeof(command_t)*STACK_SIZE);
@@ -23,7 +21,6 @@ command_t pop(command_stack* stack) {
           return NULL;
      stack->numItems -= 1;
           return stack->commandObjects[stack->numItems];
-
 }
 command_t peek(command_stack* stack){
      if(stack->numItems == 0)

@@ -2,7 +2,6 @@
 #define _COMMAND_STACK_H
 #define STACK_SIZE 256
 
-//#include <stdbool.h>
 #include "alloc.h"
 #include "command.h"
 

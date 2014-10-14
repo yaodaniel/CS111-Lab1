@@ -21,6 +21,7 @@
 #include <stdbool.h>
 #include <stdio.h>
 
+#include "op-stack.h"
 #include "command-stack.h"
 #include "command-internals.h"
 
@@ -44,7 +45,32 @@ get_next_byte (void *stream)
 int
 main (int argc, char **argv)
 {
-  char c[] = "abcdefg";
+  /*enum operator_type token1 = SEMICOLON;
+  enum operator_type token2 = PIPE;
+  enum operator_type token3 = LARROW;
+  
+  op_stack* myOpStack = create_stackOp();
+  pushOp(myOpStack, token1);
+  printf("Good! token1 is being pushed to the stack\n");
+  pushOp(myOpStack, token2);
+  printf("Good! token2 is being pushed to the stack\n");
+  pushOp(myOpStack, token3);
+  printf("Good! token3 is being pushed to the stack\n");
+  if(peekOp(myOpStack) == token3)
+  printf("Good! token3 is at the top of the stack\n");
+  printf("The current stack size is: %d \n", myOpStack->stackSize);
+  
+  printf("The current number of items on the stack is: %d \n", myOpStack->numItems);
+    if(popOp(myOpStack) == LARROW)
+    printf("Good popping works!\n");
+  popOp(myOpStack);
+  popOp(myOpStack);
+  printf("The current number of items on the stack is: %d \n", myOpStack->numItems);
+  printf("The current stack size is: %d \n", myOpStack->stackSize);
+  if(peekOp(myOpStack) == EMPTY)
+     printf("Good! the stack is now empty\n");*/
+
+  /*char c[] = "abcdefg";
 
   command_stack* myStack = create_stack();
   command_t commandOne = checked_malloc(sizeof(struct command));
@@ -61,13 +87,17 @@ main (int argc, char **argv)
   if(peek(myStack) != commandTwo)
      printf("Good! commandTwo is not on the stack\n");
      
+     printf("The current stack size is: %d \n", myStack->stackSize);
+  
+     printf("The current number of items on the stack is: %d \n", myStack->numItems);
+     
      printf("commandOne on the stack has the status: %d \n", peek(myStack) -> status);
      printf("commandOne on the stack being poped has the input: %s \n", pop(myStack) -> input); 
   if(peek(myStack) == NULL)
      printf("Good! the stack is now empty\n");
   
-  return 1;
-  /*int command_number = 1;
+  return 1;*/
+  int command_number = 1;
   bool print_tree = false;
   char const *profile_name = 0;
   program_name = argv[0];
@@ -116,5 +146,5 @@ main (int argc, char **argv)
 	}
     }
 
-  return print_tree || !last_command ? 0 : command_status (last_command);*/
+  return print_tree || !last_command ? 0 : command_status (last_command);
 }
