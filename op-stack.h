@@ -13,6 +13,14 @@ typedef enum operator_type
     RPAREN,
     LARROW,
     RARROW,
+    IF,
+    THEN,
+    ELSE,
+    FI,
+    WHILE,
+    DO,
+    UNTIL,
+    DONE,
     EMPTY //Empt, no operators
   }operator_type;
 
