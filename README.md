@@ -1,5 +1,9 @@
 CS111_lab1
 ==========
+Rev. 3
+Everything should work as expected... for now
+Passes all basic test cases
+
 Rev. 2
 Working for all basic cases
 Need to implement:

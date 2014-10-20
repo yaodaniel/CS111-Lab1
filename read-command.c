@@ -1,4 +1,3 @@
-// This is to satisfy S
 // UCLA CS 111 Lab 1 command reading
 
 // Copyright 2012-2014 Paul Eggert.
@@ -29,7 +28,7 @@
 
 int legitCharacters(char token)
 {
-	if(isalpha(token))
+	if(isalpha(token) || isdigit(token))
 	{
 		return 1;
 	}
@@ -96,9 +95,17 @@ operator_type specialTokens(char token)
 
 int precedence(enum operator_type op) {
     switch(op) {
+    case UNTIL:
+    case WHILE:
+    case IF:
     case LPAREN:
          return 6;
          break;
+    case DO:
+    case DONE:
+    case THEN:
+    case ELSE:
+    case FI:
     case RPAREN:
          return 1;
          break;
@@ -128,16 +135,20 @@ typedef struct someStream {
        enum operator_type op;
 }someStream;
 
-command_t combine(command_t first, command_t second, operator_type op) { //op cannot be LPAREN or RPAREN
+command_t combine(command_t first, command_t second, operator_type op, int lineNumber) { //op cannot be LPAREN or RPAREN
      command_t combinedCommand = checked_malloc(sizeof(struct command));
+     if(first == NULL || second == NULL){
+          fprintf(stderr,"%d: Error combining commands: One or more input is null\n",lineNumber);
+          exit(1);
+     }
      switch(op) {
          case NEWLINE:
          case SEMICOLON: {
              combinedCommand->type = SEQUENCE_COMMAND;
              combinedCommand->status = -1;
-             combinedCommand->input = NULL;
-             combinedCommand->output = NULL;
-             combinedCommand->u.word = NULL;
+             combinedCommand->input = '\0';
+             combinedCommand->output = '\0';
+             combinedCommand->u.word = '\0';
              combinedCommand->u.command[0] = first;
              combinedCommand->u.command[1] = second;
              break;   
@@ -145,33 +156,48 @@ command_t combine(command_t first, command_t second, operator_type op) { //op ca
          case PIPE: {
              combinedCommand->type = PIPE_COMMAND;
              combinedCommand->status = -1;
-             combinedCommand->input = NULL;
-             combinedCommand->output = NULL;
-             combinedCommand->u.word = NULL;
+             combinedCommand->input = '\0';
+             combinedCommand->output = '\0';
+             combinedCommand->u.word = '\0';
              combinedCommand->u.command[0] = first;
              combinedCommand->u.command[1] = second;
              break;
           }
+         //(a;b) < d 
          case LARROW: {
-             combinedCommand->type = SIMPLE_COMMAND;
+             if(second->u.word[1] != NULL){
+                fprintf(stderr,"%d: input cannot be more than 1 word\n",lineNumber);
+                exit(1);
+             }
+             combinedCommand->type = first->type;
              combinedCommand->status = -1;
-             if(second->type == SIMPLE_COMMAND)
+             combinedCommand->input = checked_malloc(sizeof(char*));
+             combinedCommand->output = checked_malloc(sizeof(char*));
              combinedCommand->input = second->u.word[0];
-             combinedCommand->output = NULL;
-             combinedCommand->u.word = first->u.word;
+             combinedCommand->output = first->output;
+             combinedCommand->u = first->u;
              break;
           }
          case RARROW: {
          // (a b < c) > (d)
-             combinedCommand->type = SIMPLE_COMMAND;
+             if(second->u.word[1] != NULL){
+                fprintf(stderr,"%d: output cannot be more than 1 word\n",lineNumber);
+                exit(1);
+             }
+             combinedCommand->type = first->type;
              combinedCommand->status = -1;
+             combinedCommand->input = checked_malloc(sizeof(char*));
+             combinedCommand->output = checked_malloc(sizeof(char*));
              combinedCommand->input = first->input;
              combinedCommand->output = second->u.word[0];
-             combinedCommand->u.word = first->u.word;
+             combinedCommand->u = first->u;
              break;
           }
-         default:
-           error(1,0,"an error has occured at combine()");
+         default: {
+             fprintf(stderr,"%d: an error has occured at combine()\n",lineNumber);
+             exit(1);
+           break;
+         }
      }
    return combinedCommand;
 }
@@ -195,118 +221,204 @@ struct command_stream {
 
 command_t makeSimpleCommand(char** buffer) {
      command_t newCommand = checked_malloc(sizeof(struct command));
+     int x = 0, index;
+     while(buffer[x] != NULL)
+          x++;
+          //printf("%d x:", x);
+     char** newBuffer = checked_malloc(sizeof(char *)*(x+1));
+     for(index = 0; index<x; index++) {
+        newBuffer[index] = buffer[index];
+        //printf("%s word\n", newBuffer[index]);
+     }
+     //printf("index: %d", index);
+        newBuffer[index] = '\0';
            newCommand -> type = SIMPLE_COMMAND;
            newCommand -> status = -1;
            newCommand -> input = NULL;
            newCommand -> output = NULL;
-           newCommand -> u.word = buffer;
+           newCommand -> u.word = newBuffer;
      return newCommand;
 }
-
 command_stream_t fixOrder(someStream* stream, int size, int lineStart) {
   command_stack* myStack = create_stack(); //Command Stack
   op_stack* myOpStack = create_stackOp(); //Operator Stack
-int parenCount = 0, index = 0, semiFlag = 0, leftArrowFlag = 0, pipeFlag = 0,
-      rightArrowFlag = 0, wasLastOp = 0, lineNumber = lineStart; //Keeps track of lineNumber
-  //command_stream_t headPtr = checked_malloc(sizeof(struct command_stream));
+  int parenCount = 0, index = 0, wasLastOp = 0, wasLastSemi_Newline = 0, lineNumber = lineStart, elseFlag = 0,
+      leadingNewLine = 1, ifFlag = 0, thenFlag = 0, elseFlag2 = 0, whileUntilFlag = 0, doFlag = 0;
   command_stream_t returnStream = checked_malloc(sizeof(struct command_stream));
-  printf("number of tokens %d \n", size);
+  
+  //printf("number of tokens %d \n", size);
   
   if(size == 0)
      return NULL;
-  
   while((stream[size-1].amISpecial) && ((stream[size-1].op == NEWLINE) || (stream[size-1].op == SEMICOLON)))
         size--;
-     
-  for(index = 0; index<size; index++) {  
+  for(index = 0; index<size; index++) {
        if(!stream[index].amISpecial){ //Just a simple command
-          /*int index2 = 0;
-          while(stream[index].command->u.word[index2] != "\0"){
-              printf("My words are: %s\n", stream[index].command->u.word[index2]);
-              index2++;
-              }*/
           push(myStack, stream[index].command);
           wasLastOp = 0;
+          leadingNewLine = 0;
+          wasLastSemi_Newline = 0;
        }
        else { //is an Op
-              if(stream[index].op == NEWLINE){ //Checks for multiple newLines in a row
+              if(stream[index].op == SEMICOLON || stream[index].op == NEWLINE)
+                 wasLastSemi_Newline = 1;
+              if(stream[index].op == NEWLINE){ //Checks for multiple newLines in a row              
                  lineNumber++;
-                 if(wasLastOp)
+                 //printf("lineNumber: %d\n",lineNumber);                 
+                 if(wasLastOp || leadingNewLine)
                     continue;
-                 } 
-              if(stream[index].op == SEMICOLON){ //Checks for multiple semicolons in a row
-                   if(semiFlag && stream[index-1].op == SEMICOLON) {
-                        fprintf(stderr,"%d: Multiple semicolons in a row\n ",lineNumber);
-   	                    exit(1);
-                     }
-                   else if (semiFlag && stream[index].op != SEMICOLON)
-                      semiFlag = 0;
-                   else
-                      semiFlag = 1;
                  }
-              if(stream[index].op == PIPE){ //Checks for multiple pipes in a row
-                   if(pipeFlag && stream[index-1].op == PIPE) {
-                        fprintf(stderr,"%d: Multiple piepes in a row\n ",lineNumber);
-   	                    exit(1);
-                     }
-                   else if (pipeFlag && stream[index].op != PIPE)
-                      pipeFlag = 0;
-                   else
-                      pipeFlag = 1;
+  //WHILE/UNTIL LOOP
+              if(stream[index].op == WHILE || stream[index].op == UNTIL)
+                  whileUntilFlag = 1;
+              if(stream[index].op == DO) {
+                 if(whileUntilFlag) {
+                    fprintf(stderr,"%d: Invalid while statement\n",lineNumber);
+                    exit(1);
+                 } else {
+                   whileUntilFlag = 0;
+                   doFlag = 1;
                  }
-              if(stream[index].op == LARROW){ //Checks for multiple <s in a row
-                   if(leftArrowFlag && stream[index-1].op == LARROW) {
-                        fprintf(stderr,"%d: Multiple left arrows in a row\n ",lineNumber);
-   	                    exit(1);
-                     }
-                   else if (leftArrowFlag && stream[index].op != LARROW)
-                      leftArrowFlag = 0;
-                   else
-                      leftArrowFlag = 1;
+              }
+              if(stream[index].op == DONE) {
+                if(whileUntilFlag || doFlag) {
+                   fprintf(stderr,"%d: Invalid while statement\n", lineNumber);
+                   exit(1);    
+                }
+              }
+  //IF Statements            
+              if(stream[index].op == IF)
+                 ifFlag = 1;
+              if(stream[index].op == THEN){
+                 if(ifFlag){
+                   fprintf(stderr,"%d: Invalid if statement\n",lineNumber);
+                   exit(1);
+                 } else {
+                    ifFlag = 0;
+                    thenFlag = 1;
                  }
-              if(stream[index].op == RARROW){ //Checks for multiple <s in a row
-                   if(rightArrowFlag && stream[index-1].op == RARROW) {
-                        fprintf(stderr,"%d: Multiple right arrows in a row\n ",lineNumber);
-   	                    exit(1);
-                     }
-                   else if (rightArrowFlag && stream[index].op != RARROW)
-                      rightArrowFlag = 0;
-                   else
-                      rightArrowFlag = 1;
+              }
+              if(stream[index].op == ELSE) {
+                 if(ifFlag || thenFlag) {
+                   fprintf(stderr,"%d: Invalid if statement\n",lineNumber);
+                   exit(1);
+                 } else {
+                     thenFlag = 0;
+                     elseFlag2 = 1;
                  }
+              }
+              if(stream[index].op == FI) {
+                 if(ifFlag || thenFlag || elseFlag2) {
+                    fprintf(stderr,"%d: Invalid if statement\n",lineNumber);
+                    exit(1);
+                 } else {
+                    elseFlag2 = 0;
+                 }
+              }
+              if(stream[index].op != WHILE && stream[index].op != UNTIL && stream[index].op != DO && stream[index].op != DONE){
+                 whileUntilFlag = 0; doFlag = 0;
+              }
+              
+              if(stream[index].op != IF && stream[index].op != THEN && stream[index].op != ELSE && stream[index].op != FI){
+                 ifFlag = 0; thenFlag = 0; elseFlag2 = 0;
+              }
+              /*else if((stream[index].op != IF)&&(stream[index].op != THEN)&&(stream[index].op != ELSE)&&(stream[index].op != FI))
+                 wasLastSemi_Newline = 0;*/
+              if(((stream[index].op != LPAREN)&&(stream[index].op != IF)&&(stream[index].op != THEN)&&(stream[index].op != ELSE)&&(stream[index].op != FI)
+                   &&(stream[index].op != UNTIL)&&(stream[index].op != WHILE)&&(stream[index].op != DO)&&(stream[index].op != DONE)) && wasLastOp){
+                   fprintf(stderr,"%d: Invalid operators in a row\n",lineNumber);
+                   exit(1);
+                 }   
               if(stream[index].op == LPAREN)
                  parenCount++;
               if(stream[index].op == RPAREN)
                  parenCount--;
               if(parenCount < 0) {
-                    fprintf(stderr,"%d: Too many closing parentheses\n ",lineNumber);
+                    fprintf(stderr,"%d: Too many closing parentheses\n",lineNumber);
                     exit(1);
                  }
                  wasLastOp = 1;
+                 leadingNewLine = 0;
            if(myOpStack->numItems == 0) //If Op stack is empty
                 pushOp(myOpStack, stream[index].op);                
            else {
+                if(stream[index].op == THEN || stream[index].op == ELSE || stream[index].op == FI || stream[index].op == DO || stream[index].op == DONE) {
+                             if(wasLastSemi_Newline && (peekOp(myOpStack) == SEMICOLON || peekOp(myOpStack) == NEWLINE)){
+                                popOp(myOpStack);
+                                wasLastSemi_Newline = 0;
+                             }
+                             if(stream[index].op == DO)
+                                  doFlag = 1;
+                             if(stream[index].op == DONE) {
+                                  popOp(myOpStack); //Pop off the DO
+                                  operator_type opType = popOp(myOpStack); //Tells us if we should make a While or Until command
+                                  command_t newCommand = checked_malloc(sizeof(struct command));
+                                  if(opType == WHILE)
+                                     newCommand -> type = WHILE_COMMAND;
+                                  else
+                                     newCommand -> type = UNTIL_COMMAND;
+                                  newCommand -> status = -1;
+                                  newCommand -> u.command[1] = pop(myStack);
+                                  newCommand -> u.command[0] = pop(myStack);
+                                  push(myStack, newCommand);
+                                  wasLastOp = 0;
+                                  continue;
+                             }
+                                
+                             if(stream[index].op == ELSE)
+                                elseFlag = 1;
+                             if(stream[index].op == FI) {
+                                  if(elseFlag){
+                                    operator_type three = popOp(myOpStack);
+                                    operator_type two = popOp(myOpStack);
+                                    operator_type one = popOp(myOpStack);
+                                    if(three != ELSE || two != THEN || one != IF){
+                                       fprintf(stderr,"%d: Invalid If statement detected\n",lineNumber);
+                                       exit(1);
+                                     }
+                                   }
+                                   else {
+                                     operator_type two = popOp(myOpStack);
+                                     operator_type one = popOp(myOpStack);
+                                     if(two != THEN || one != IF) {
+                                       fprintf(stderr,"%d: Invalid If statement detected\n",lineNumber);
+                                       exit(1);
+                                     }
+                                   }
+                                   command_t ifCommand = checked_malloc(sizeof(struct command));
+                                   ifCommand -> type = IF_COMMAND;
+                                   ifCommand -> status = -1;
+                                if(elseFlag){
+                                   ifCommand -> u.command[2] = pop(myStack);
+                                   ifCommand -> u.command[1] = pop(myStack);
+                                   ifCommand -> u.command[0] = pop(myStack);
+                                }
+                                else{
+                                   ifCommand -> u.command[1] = pop(myStack);
+                                   ifCommand -> u.command[0] = pop(myStack);
+                                }
+                                push(myStack, ifCommand);
+                                elseFlag = 0;
+                                wasLastOp = 0;
+                                continue;
+                             }
+                    }
                 if(precedence(stream[index].op) > precedence(peekOp(myOpStack)))
                    pushOp(myOpStack, stream[index].op);
                 else {
-                    while((peekOp(myOpStack) != LPAREN) 
-                          && (precedence(stream[index].op) <= precedence(peekOp(myOpStack)))) {
-                          /*if((myOpStack->numItems) != (myStack->numItems - 1)){
-                              error(1, 0, "%d: Too many/few operators detected\n", lineNumber);
-                            }*/
+                    while(((peekOp(myOpStack) != LPAREN) && (peekOp(myOpStack) != IF) && (peekOp(myOpStack) != THEN) && (peekOp(myOpStack) != ELSE)
+                           && (peekOp(myOpStack) != WHILE) && (peekOp(myOpStack) != DO) && (peekOp(myOpStack) != UNTIL)) 
+                           && (precedence(stream[index].op) <= precedence(peekOp(myOpStack)))) {
                           operator_type theOp = popOp(myOpStack);
                           command_t secondCommand = pop(myStack);
                           command_t firstCommand = pop(myStack);
-                          push(myStack, combine(firstCommand, secondCommand, theOp));
+                          push(myStack, combine(firstCommand, secondCommand, theOp, lineNumber));
                           if(myOpStack->numItems == 0)
                              break;
                      }
                      pushOp(myOpStack, stream[index].op);      
                 }
                 if(stream[index].op == RPAREN){
-                  /*if((myOpStack->numItems) != (myStack->numItems - 1)){
-                     error(1, 0, "%d: Too many/few operators detected\n", lineNumber);
-                     }*/
                      popOp(myOpStack);
                      popOp(myOpStack);
                      command_t subShellCommand = checked_malloc(sizeof(struct command));
@@ -321,19 +433,22 @@ int parenCount = 0, index = 0, semiFlag = 0, leftArrowFlag = 0, pipeFlag = 0,
            }
        }
   }
-  if((myOpStack->numItems) != (myStack->numItems - 1)) {    
-        fprintf(stderr,"%d: Too many/few operators detected\n ",lineNumber);
+  /*if((myOpStack->numItems == 0 && (myStack->numItems == 0)))
+        return NULL;*/
+  if((myOpStack->numItems) != (myStack->numItems - 1)) {  
+        //printf("OpStack %d: \n", myOpStack->numItems);
+        //printf("Stack %d: \n", myStack->numItems);
+        fprintf(stderr,"%d: Too many/few operators detected\n",lineNumber);
         exit(1);
      }   
-
   while(myOpStack->numItems  != 0) {  
        command_t secondCommand = pop(myStack);
        command_t firstCommand = pop(myStack);       
        operator_type op = popOp(myOpStack);
-       push(myStack, combine(firstCommand, secondCommand, op));
+       push(myStack, combine(firstCommand, secondCommand, op, lineNumber));
    }
     returnStream -> command = pop(myStack);
- 
+   //printf("size: %d", size);
   return returnStream;
 }
 //Checks for invalid letters, removes extra spaces, comments, etc
@@ -381,7 +496,7 @@ int TOKEN_SIZE = 10;
 		{
 			if(wordFlag == 1)
 			{
-				fprintf(stderr,"Invalid Comment Syntax at line number: %d \n ",lineNumber );
+				fprintf(stderr,"%d: Invalid Comment Syntax \n",lineNumber);
 				exit(1);
 			}
 			commentFlag = 1;
@@ -425,7 +540,7 @@ int TOKEN_SIZE = 10;
 			{
 				if(!legitCharacters(tempChar))
 				{
-					fprintf(stderr,"Invalid character at line number: %d \n ",lineNumber );
+					fprintf(stderr,"%d: Invalid character \n",lineNumber);
 					exit(1);
 				}
 				word[noOfChars] = tempChar;
@@ -474,11 +589,8 @@ make_command_stream (int (*get_next_byte) (void *),		// Parse texts
   /* FIXME: Replace this with your implementation.  You may need to
      add auxiliary functions and otherwise modify the source code.
      You can also use external functions defined in the GNU C Library.  */
-/* FIXME: Replace this with your implementation.  You may need to
-     add auxiliary functions and otherwise modify the source code.
-     You can also use external functions defined in the GNU C Library.  */
- int lineNumber = 1, i=0, bufferFlag=0, noOfStreams=0, specialTokenFlag = 0,reasonableCommandSize = 100, numWordsInCurrentCommand = 0, noOfTokens = 0, streamSizeLimit=100;
-  int ifFlag = 0,thenFlag, closingFlag=0, untilWhileFlag=0, doFlag=0, start = 0, newLineSemiColonFlag=0, syntaxFlag =0;
+int lineNumber = 1, i=0, bufferFlag=0, noOfStreams=0, specialTokenFlag = 0,reasonableCommandSize = 100, numWordsInCurrentCommand = 0, noOfTokens = 0, streamSizeLimit=100;
+  int start = 0, tempLineNumber=1,ifFlag = 0,thenFlag, closingFlag=0, untilWhileFlag=0, doFlag=0,newLineSemiColonFlag=0,syntaxFlag=0;
   char** tokens = parseAndRemove((*get_next_byte), get_next_byte_argument, &noOfTokens);
   char** buffer = checked_malloc(sizeof(char*)*reasonableCommandSize);
   command_stream_t the_stream_head = checked_malloc(sizeof(struct command_stream));
@@ -492,12 +604,17 @@ make_command_stream (int (*get_next_byte) (void *),		// Parse texts
   
   while(specialTokens(tokens[i][0])==NEWLINE)
   {
+	lineNumber++;
+	tempLineNumber++;
 	i++;
   }
-  start = i;
-  
+	start = i;
 	for(i=start; i<noOfTokens; i++)
 	{
+		if(specialTokens(tokens[i][0])==NEWLINE)
+		{
+			lineNumber++;
+		}
 		
 		if(specialTokens(tokens[i][0])!=EMPTY)
 		{
@@ -505,7 +622,7 @@ make_command_stream (int (*get_next_byte) (void *),		// Parse texts
 			
 			if(syntaxFlag && specialTokens(tokens[i][0])== NEWLINE && specialTokenFlag)
 			{
-				fprintf(stderr,"Syntax mismatch\n ");
+				fprintf(stderr,"%d: Syntax mismatch\n", lineNumber);
 				exit(1);
 			}
 			else if(newLineSemiColonFlag && specialTokens(tokens[i][0])== RPAREN && specialTokenFlag)
@@ -514,7 +631,7 @@ make_command_stream (int (*get_next_byte) (void *),		// Parse texts
 			}
 			else if(newLineSemiColonFlag && (specialTokens(tokens[i][0])== RARROW || specialTokens(tokens[i][0])== LARROW || specialTokens(tokens[i][0])== PIPE  || specialTokens(tokens[i][0])== SEMICOLON ) && specialTokenFlag)
 			{
-				fprintf(stderr,"Syntax mismatch\n ");
+				fprintf(stderr,"%d: Syntax mismatch\n", lineNumber);
 				exit(1);
 			}
 			else if(specialTokenFlag || i == start)
@@ -522,7 +639,7 @@ make_command_stream (int (*get_next_byte) (void *),		// Parse texts
 				stream[noOfStreams].op = specialTokens(tokens[i][0]);
 				stream[noOfStreams].amISpecial = 1;
 				noOfStreams++;
-				if(noOfStreams==streamSizeLimit)
+				if(noOfStreams==(streamSizeLimit-10))
 				{
 					streamSizeLimit *=2;
 					stream = checked_realloc(stream, sizeof(someStream)*streamSizeLimit);
@@ -532,12 +649,13 @@ make_command_stream (int (*get_next_byte) (void *),		// Parse texts
 			else
 			{
 				stream[noOfStreams].amISpecial = 0;
+				buffer[numWordsInCurrentCommand]=NULL;
 				stream[noOfStreams].command=makeSimpleCommand(buffer);
 				noOfStreams++;
 				reasonableCommandSize = 100;
 				numWordsInCurrentCommand=0;
 				buffer = checked_malloc(sizeof(char*)*reasonableCommandSize);
-				if(noOfStreams+1==streamSizeLimit)
+				if(noOfStreams==(streamSizeLimit-10))
 				{
 					streamSizeLimit *=2;
 					stream = checked_realloc(stream, sizeof(someStream)*streamSizeLimit);
@@ -545,18 +663,13 @@ make_command_stream (int (*get_next_byte) (void *),		// Parse texts
 				stream[noOfStreams].op = specialTokens(tokens[i][0]);
 				stream[noOfStreams].amISpecial = 1;
 				noOfStreams++;
+				if(noOfStreams==(streamSizeLimit-10))
+				{
+					streamSizeLimit *=2;
+					stream = checked_realloc(stream, sizeof(someStream)*streamSizeLimit);
+				}
 				specialTokenFlag =1;
 			}
-			if(specialTokens(tokens[i][0])== NEWLINE || specialTokens(tokens[i][0])== SEMICOLON)
-				newLineSemiColonFlag=1;
-			else
-				newLineSemiColonFlag=0;
-			if(specialTokens(tokens[i][0])== RARROW || specialTokens(tokens[i][0])== LARROW )
-			{
-				syntaxFlag=1;
-			}
-			else
-				syntaxFlag=0;
 			
 		}
 		else if((specialTokenFlag || i==start) && specialKeywords(tokens[i]) != EMPTY) //Here
@@ -592,7 +705,7 @@ make_command_stream (int (*get_next_byte) (void *),		// Parse texts
 				}
 				else
 				{
-					fprintf(stderr,"If statements mismatch\n ");
+					fprintf(stderr,"%d: If statements mismatch\n", lineNumber);
 					exit(1);
 				}
 			}
@@ -612,7 +725,7 @@ make_command_stream (int (*get_next_byte) (void *),		// Parse texts
 				}
 				else
 				{
-					fprintf(stderr,"If statements mismatch\n ");
+					fprintf(stderr,"%d: If statements mismatch\n", lineNumber);
 					exit(1);
 				}
 			}
@@ -632,7 +745,7 @@ make_command_stream (int (*get_next_byte) (void *),		// Parse texts
 				}
 				else
 				{
-					fprintf(stderr,"If statements mismatch\n ");
+					fprintf(stderr,"%d: If statements mismatch\n", lineNumber);
 					exit(1);
 				}
 			}
@@ -665,7 +778,7 @@ make_command_stream (int (*get_next_byte) (void *),		// Parse texts
 				}
 				else
 				{
-					fprintf(stderr,"While/Until statements mismatch\n ");
+					fprintf(stderr,"%d: While/Until statements mismatch\n", lineNumber);
 					exit(1);
 				}
 			}
@@ -685,7 +798,7 @@ make_command_stream (int (*get_next_byte) (void *),		// Parse texts
 				}
 				else
 				{
-					fprintf(stderr,"While/Until statements mismatch\n ");
+					fprintf(stderr,"%d: While/Until statements mismatch\n", lineNumber);
 					exit(1);
 				}
 			}
@@ -702,6 +815,16 @@ make_command_stream (int (*get_next_byte) (void *),		// Parse texts
 				buffer = checked_realloc(buffer,sizeof(char*)*reasonableCommandSize);
 			}
 		}
+		if(specialTokens(tokens[i][0])== NEWLINE || specialTokens(tokens[i][0])== SEMICOLON)
+			newLineSemiColonFlag=1;
+		else
+			newLineSemiColonFlag=0;
+		if(specialTokens(tokens[i][0])== RARROW || specialTokens(tokens[i][0])== LARROW )
+		{
+			syntaxFlag=1;
+		}
+		else
+			syntaxFlag=0;
 	}
 	if(bufferFlag)
 	{
@@ -709,7 +832,7 @@ make_command_stream (int (*get_next_byte) (void *),		// Parse texts
 		stream[noOfStreams].command=makeSimpleCommand(buffer);
 		noOfStreams++;
 	}
-	i=0;
+/*	i=0;
 	while(i<noOfStreams)
 	{
 		printf("Stream special : %u ", stream[i].amISpecial);
@@ -717,30 +840,137 @@ make_command_stream (int (*get_next_byte) (void *),		// Parse texts
 		{
 			printf("Type :%u", stream[i].op);
 		}
+		else
+		{
+			int k =0;
+			while(stream[i].command->u.word[k] !=NULL)
+			{
+				printf("%s",stream[i].command->u.word[k]);
+				k++;
+			}
+		}
 		printf("\n");
 		i++;
+	}*/
+	//Code Starts Here
+	i=0;
+	lineNumber =tempLineNumber;
+	int counter=0;
+	int numberOfNodes=0;
+	int newLineFlag=0;
+	int doneExecution=1;
+	int skip =0;
+	ifFlag=0;
+	int whileUntilFlag=0;
+	someStream* streamIterator = stream;
+	
+	
+	for(i=0;i<noOfStreams;i++)
+	{
+		if(stream[i].amISpecial && stream[i].op==NEWLINE)
+		{
+			tempLineNumber++;
+		}
+		if(doneExecution)
+		{
+			if(stream[i].amISpecial && stream[i].op==NEWLINE)
+			{
+				skip =1;
+			}
+			else
+			{
+				lineNumber = tempLineNumber;
+				streamIterator = &stream[i];
+				doneExecution=0;
+			}
+		}
+		if(skip!=1)
+		{
+			if(stream[i].amISpecial)
+			{
+				if(newLineFlag&&stream[i].op==NEWLINE&&ifFlag==0&&whileUntilFlag==0)
+				{
+					if(numberOfNodes==0)
+					{
+						the_stream_head = fixOrder(streamIterator,counter,lineNumber);
+						doneExecution=1;
+						counter=0;
+						numberOfNodes++;
+					}
+					else
+					{
+						command_stream_t commandNodeIterator=the_stream_head;
+						while(commandNodeIterator->next != NULL)
+						{
+							commandNodeIterator = commandNodeIterator->next;
+						}
+						commandNodeIterator->next = checked_malloc(sizeof(struct command_stream));
+						commandNodeIterator->next = fixOrder(streamIterator,counter,lineNumber);
+						doneExecution=1;
+						counter=0;
+						numberOfNodes++;
+					}
+				}
+				else if(stream[i].op==NEWLINE)
+				{
+					newLineFlag =1;
+					counter++;
+				}
+				else
+				{
+					newLineFlag=0;
+					counter++;
+				}
+				if(stream[i].op==IF)
+				{
+					ifFlag++;
+				}
+				if(stream[i].op==FI)
+				{
+					ifFlag--;
+				}
+				if(stream[i].op==WHILE||stream[i].op==UNTIL)
+				{
+					whileUntilFlag++;
+				}
+				if(stream[i].op==DONE)
+				{
+					whileUntilFlag--;
+				}
+			}
+			else
+			{
+				newLineFlag=0;
+				counter++;
+			}
+		}
+		skip =0;
 	}
-	   the_stream_head=fixOrder(stream,noOfStreams,1);
+	if(counter!=0)
+	{
+		if(numberOfNodes==0)
+		{
+			the_stream_head = fixOrder(stream,noOfStreams,lineNumber);
+			numberOfNodes++;
+		}
+		else
+		{
+			command_stream_t commandNodeIterator=the_stream_head;
+			while(commandNodeIterator->next != NULL)
+			{
+				commandNodeIterator = commandNodeIterator->next;
+			}
+			commandNodeIterator->next = checked_malloc(sizeof(struct command_stream));
+			commandNodeIterator->next = fixOrder(streamIterator,counter,lineNumber);
+			numberOfNodes++;
+		}
+	}
    return the_stream_head;
-
-
 }
 
 command_t	
 read_command_stream (command_stream_t s)		// Creates a stack with commands
 {
-  /* FIXME: Replace this with your implementation too.  */
-  //error (1, 0, "command reading not yet implemented");
-         /*if(s->command->u.command[0]->type == SIMPLE_COMMAND)
-         printf("First command is of type Simple\n");
-         printf("%s \n", s -> command -> u.command[0] -> u.word[0]);
-         printf("%s \n", s -> command -> u.command[0] -> u.word[1]);*/
-         
-         /*if(s->command->u.command[0]->type == SIMPLE_COMMAND)
-         printf("Second command is of type Simple\n");
-         printf("%s \n", s -> command -> u.command[1] -> u.word[0]);
-         printf("%s \n", s -> command -> u.command[1] -> u.word[1]);*/
-
 if(s->command)
 	{
 		command_t temp = s->command;
@@ -751,7 +981,6 @@ if(s->command)
 		}
 		else
 		s->command = NULL;
-		//printf("command's 2nd word %s \n", temp->u.command[0]->u.word[1]);
 
 		return temp;
 	}

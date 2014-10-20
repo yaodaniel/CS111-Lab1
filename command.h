@@ -1,3 +1,5 @@
+#ifndef _COMMAND_H
+#define _COMMAND_H
 // UCLA CS 111 Lab 1 command interface
 
 // Copyright 2012-2014 Paul Eggert.
@@ -44,3 +46,4 @@ void execute_command (command_t, int);
 /* Return the exit status of a command, which must have previously
    been executed.  Wait for the command, if it is not already finished.  */
 int command_status (command_t);
+#endif

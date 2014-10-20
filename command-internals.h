@@ -1,3 +1,5 @@
+#ifndef _COMMAND_INTERNALS_H
+#define _COMMAND_INTERNALS_H
 // UCLA CS 111 Lab 1 command internals
 
 // Copyright 2012-2014 Paul Eggert.
@@ -48,3 +50,4 @@ struct command
     struct command *command[3];
   } u;
 }command;
+#endif

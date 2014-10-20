@@ -44,7 +44,7 @@ PROFSH_SOURCES = \
 PROFSH_OBJECTS = $(subst .c,.o,$(PROFSH_SOURCES))
 
 DIST_SOURCES = \
-  $(PROFSH_SOURCES) alloc.h command.h command-internals.h Makefile \
+  $(PROFSH_SOURCES) alloc.h command.h command-internals.h op-stack.h command-stack.h Makefile \
   $(TESTS) check-dist COPYING README
 
 profsh: $(PROFSH_OBJECTS)
